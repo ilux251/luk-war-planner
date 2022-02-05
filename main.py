@@ -1,11 +1,14 @@
+from ast import arg
+from tkinter import W
 import demjson
 import ssl
 import re
 import math
 import csv
+import random
+import argparse
 from urllib import request
 from lxml import html
-from functools import partial
 
 def getHtmlFromRequest(url):
   ctx = ssl.create_default_context()
@@ -36,7 +39,7 @@ def getPlayers (allianceLink):
 def getPlayersHabitate(players):
   habitate = []
 
-  for player in enemyPlayers:
+  for player in players:
     playersHtmlData = getHtmlFromRequest(playersUrl + player["link"])
 
     playerHabitate = playersHtmlData.xpath("//table[@id='PlayerCastles']/tr")
@@ -62,6 +65,17 @@ def filterCastlesInHotspot(habitat, hotspots):
   return len(possibleHotspot) > 0
 
 if __name__ == "__main__":
+  # hotspots = [{"x": 16269, "y": 16419, "r": 10}, {"x": 16303, "y": 16442, "r": 5}]
+
+  parser = argparse.ArgumentParser()
+  parser.add_argument('--hotspots', type=str, help='Bereich für scharfe Ziele definieren.', required=True)
+  parser.add_argument('--fakes', type=int, help='Wie viele fakes bekommt jeder Spieler?', required=True)
+  parser.add_argument('--offEinheiten', type=int, help='Wie viele Einheiten pro scharfes Ziel benötigt wird.', required=True)
+  parser.add_argument('--datum', type=str, help='Am welchen Tag erfolgt der Einschlag?', required=True)
+  parser.add_argument('--zeiten', type=str, help='An welchen Zeiten kann angegriffen werden?', default='["7:00", "7:10", "7:20", "7:30", "7:40", "7:50", "8:00", "8:10", "8:20", "8:30", "8:40", "8:50"]')
+
+  args = parser.parse_args()
+
   enemyAllianceLink = "l+k://alliance?1155&260"
   allianceRequestUrl = "https://lordsandknights.enjoyed.today/tools/AllianceMembers/default.aspx?alliance="
   playersUrl = "https://lordsandknights.enjoyed.today/PlayerCastles/default.aspx?player="
@@ -69,18 +83,71 @@ if __name__ == "__main__":
   enemyPlayers = getPlayers(enemyAllianceLink)
   enemyHabitate = getPlayersHabitate(enemyPlayers)
 
-  hotspots = [{"x": 16269, "y": 16419, "r": 10}, {"x": 16303, "y": 16442, "r": 5}]
+  aufteilung = {}
+
+  hotspots = demjson.decode(args.hotspots)
+  fakes = args.fakes
+  offEinheiten = args.offEinheiten
+  datum = args.datum
+  zeiten = demjson.decode(args.zeiten)
 
   enemyCastles = list(filter(filterOnlyCastles, enemyHabitate))
-  enemyCastlesOnlyInHotspot = list(filter(lambda habitat : filterCastlesInHotspot(habitat, hotspots), enemyHabitate))
+  enemyCastlesOnlyInHotspot = list(filter(lambda habitat : filterCastlesInHotspot(habitat, hotspots), enemyCastles))
 
   with open("enemyCoordinates.txt", "w+", encoding="utf8") as file:
     file.write(str(enemyCastlesOnlyInHotspot))
 
-  ## todo's
-  ### python main.py -enemyHotspots [{x: 16444, y: 16533, r: 5}, {x: 16410, y: 16522, r: 10}] -playersInput players.csv -faken 3
-  ### mehrere Coordinaten und andere Radien eingeben und auswerten
-  ### CSV erstellen, indem alle Spieler aufgelistet werden, die bei Krieg mitmachen
-  ### Jeder Spieler bekommt schrittweise die Links verteilts. (änhlich zu Uno)
-  ### Als Parameter einen Bereich definieren, wie viele Castels angegriffen werden dürfen.
-  ### Gruppenunterteilung, an welchen Tagen die Spieler angreifen können. Die Burgen müssen auf unterschiedliche Zeiten gefaked werden.
+  with open("players.csv", newline='', encoding="utf8") as csvFile:
+    enemyCastlesCopy = enemyCastles.copy()
+    enemyCastlesOnlyInHotspotShuffled = enemyCastlesOnlyInHotspot.copy()
+    random.shuffle(enemyCastlesOnlyInHotspotShuffled)
+    playersFromCSV = csv.DictReader(csvFile, delimiter=",")
+    
+    playersCopy = []
+
+    for player in playersFromCSV:
+      countCastles = math.floor(int(player["offEinheiten"]) / offEinheiten)
+      if (countCastles >= int(player["castles"])):
+        countCastles = int(player["castles"])
+
+      player.update({"castles": countCastles, "hotTargets": []})
+
+      playersCopy.append(player)
+
+    for fake in range(fakes):
+      for player in playersCopy:
+        if player["name"] not in aufteilung:
+          aufteilung[player["name"]] = {**player, "fakes": [enemyCastlesCopy.pop()]}
+        else:
+          aufteilung[player["name"]]["fakes"].append(enemyCastlesCopy.pop())
+      
+    for player in aufteilung:
+      for i in range(aufteilung[player]["castles"]):
+        aufteilung[player]["hotTargets"].append(enemyCastlesOnlyInHotspotShuffled.pop())
+
+  with open("war-plan.txt", "w+", encoding="utf8") as file:
+    for player in aufteilung:
+      random.shuffle(zeiten)
+
+      file.write("Guten Tag " + aufteilung[player]["name"] + ", \n\nder Einschlag erfolgt am " + datum + ", um " + zeiten[0] + ".\n\n")
+
+      file.write("fake Ziele:\n")
+      for fake in aufteilung[player]["fakes"]:
+        file.write(fake["coordinateLink"] + "\n")
+
+      file.write("\n")
+
+      if len(aufteilung[player]["hotTargets"]) > 0:
+        file.write("scharfe Ziele:\n")
+
+      for target in aufteilung[player]["hotTargets"]:
+        file.write(target["coordinateLink"] + "\n")
+
+      file.write("\n")
+
+      file.write("Berichte werden nicht gelöscht! \nIm Forum nach dem Bericht-Protokoll erkundigen.\n\n")
+
+      if len(aufteilung[player]["hotTargets"]) == 0:
+        file.write("Nicht genug Einheiten für scharfe Ziele.\nBenötigte Einheiten pro Burg: " + str(offEinheiten) + "\n")
+
+      file.write("----------------------------------------------\n")

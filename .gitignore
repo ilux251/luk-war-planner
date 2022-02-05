@@ -1,3 +1,3 @@
 __pycache__/
-coordinates.txt
-players.txt
+*.csv
+*.txt
