@@ -1,5 +1,3 @@
-from ast import arg
-from tkinter import W
 import demjson
 import ssl
 import re
@@ -31,8 +29,8 @@ def getPlayersAsVector (playersContent):
 
   return demjson.decode(playersMatch.group(1))
 
-def getPlayers (allianceLink):
-  allicanceHtmlData = getHtmlFromRequest(allianceRequestUrl + allianceLink)
+def getPlayersFromAlliance (allianceRequestUrl):
+  allicanceHtmlData = getHtmlFromRequest(allianceRequestUrl)
   playersContent = getPlayersContent(allicanceHtmlData)
   return getPlayersAsVector(playersContent)
 
@@ -48,12 +46,14 @@ def getPlayersHabitate(players):
       coordinateLink = playerHabitat.xpath("./td/a")[0].text_content()
       coordinateMatch = re.search("(\d+),(\d+)", coordinateLink)
       pointsMatch = re.search("\d+", playerHabitat.xpath("./td/text()")[0])
+      habitatName = playerHabitat.xpath("./td[2]/text()")[0]
       points = pointsMatch.group(0)
 
       habitate.append({"coordinateLink": coordinateLink,
                        "coordinate-x": int(coordinateMatch.group(1)),
                        "coordinate-y": int(coordinateMatch.group(2)),
-                       "points": points})
+                       "points": points,
+                       "habitatName": habitatName})
 
   return habitate
 
@@ -65,9 +65,8 @@ def filterCastlesInHotspot(habitat, hotspots):
   return len(possibleHotspot) > 0
 
 if __name__ == "__main__":
-  # hotspots = [{"x": 16269, "y": 16419, "r": 10}, {"x": 16303, "y": 16442, "r": 5}]
-
   parser = argparse.ArgumentParser()
+  parser.add_argument('--enemyAllianceIds', type=str, help='Ids der gegnerischen Alliancen')
   parser.add_argument('--hotspots', type=str, help='Bereich für scharfe Ziele definieren.', required=True)
   parser.add_argument('--fakes', type=int, help='Wie viele fakes bekommt jeder Spieler?', required=True)
   parser.add_argument('--offEinheiten', type=int, help='Wie viele Einheiten pro scharfes Ziel benötigt wird.', required=True)
@@ -76,20 +75,25 @@ if __name__ == "__main__":
 
   args = parser.parse_args()
 
-  enemyAllianceLink = "l+k://alliance?1155&260"
-  allianceRequestUrl = "https://lordsandknights.enjoyed.today/tools/AllianceMembers/default.aspx?alliance="
-  playersUrl = "https://lordsandknights.enjoyed.today/PlayerCastles/default.aspx?player="
-
-  enemyPlayers = getPlayers(enemyAllianceLink)
-  enemyHabitate = getPlayersHabitate(enemyPlayers)
-
   aufteilung = {}
+  enemyPlayers = []
 
+  enemyAllianceIds = demjson.decode(args.enemyAllianceIds)
   hotspots = demjson.decode(args.hotspots)
   fakes = args.fakes
   offEinheiten = args.offEinheiten
   datum = args.datum
   zeiten = demjson.decode(args.zeiten)
+
+  allianceRequestUrl = "https://lordsandknights.enjoyed.today/tools/AllianceMembers/default.aspx?alliance=l+k://alliance?{}&260"
+  playersUrl = "https://lordsandknights.enjoyed.today/PlayerCastles/default.aspx?player="
+
+  for allianceId in enemyAllianceIds:
+    allianceUrl = allianceRequestUrl.format(allianceId)
+    enemyPlayers.extend(getPlayersFromAlliance(allianceUrl))
+
+  enemyHabitate = getPlayersHabitate(enemyPlayers)
+  random.shuffle(enemyHabitate)
 
   enemyCastles = list(filter(filterOnlyCastles, enemyHabitate))
   enemyCastlesOnlyInHotspot = list(filter(lambda habitat : filterCastlesInHotspot(habitat, hotspots), enemyCastles))
@@ -98,10 +102,10 @@ if __name__ == "__main__":
     file.write(str(enemyCastlesOnlyInHotspot))
 
   with open("players.csv", newline='', encoding="utf8") as csvFile:
-    enemyCastlesCopy = enemyCastles.copy()
-    enemyCastlesOnlyInHotspotShuffled = enemyCastlesOnlyInHotspot.copy()
-    random.shuffle(enemyCastlesOnlyInHotspotShuffled)
-    playersFromCSV = csv.DictReader(csvFile, delimiter=",")
+    enemyCastlesCopy1 = enemyCastles.copy()
+    enemyCastlesCopy2 = enemyCastles.copy()
+    enemyCastlesOnlyInHotspotCopy = enemyCastlesOnlyInHotspot.copy()
+    playersFromCSV = csv.DictReader(csvFile, delimiter=";")
     
     playersCopy = []
 
@@ -114,16 +118,14 @@ if __name__ == "__main__":
 
       playersCopy.append(player)
 
-    for fake in range(fakes):
-      for player in playersCopy:
-        if player["name"] not in aufteilung:
-          aufteilung[player["name"]] = {**player, "fakes": [enemyCastlesCopy.pop()]}
-        else:
-          aufteilung[player["name"]]["fakes"].append(enemyCastlesCopy.pop())
+    
+    for playerIndex in range(0, len(playersCopy), 2):
+      aufteilung[playersCopy[playerIndex]["name"]] = {**playersCopy[playerIndex], "fakes": [enemyCastlesCopy1.pop() for x in range(fakes)]}
+      aufteilung[playersCopy[playerIndex + 1]["name"]] = {**playersCopy[playerIndex + 1], "fakes": [enemyCastlesCopy2.pop() for x in range(fakes)]}
       
     for player in aufteilung:
       for i in range(aufteilung[player]["castles"]):
-        aufteilung[player]["hotTargets"].append(enemyCastlesOnlyInHotspotShuffled.pop())
+        aufteilung[player]["hotTargets"].append(enemyCastlesOnlyInHotspotCopy.pop())
 
   with open("war-plan.txt", "w+", encoding="utf8") as file:
     for player in aufteilung:
@@ -133,6 +135,7 @@ if __name__ == "__main__":
 
       file.write("fake Ziele:\n")
       for fake in aufteilung[player]["fakes"]:
+        file.write(fake["habitatName"] + "\n")
         file.write(fake["coordinateLink"] + "\n")
 
       file.write("\n")
@@ -141,6 +144,7 @@ if __name__ == "__main__":
         file.write("scharfe Ziele:\n")
 
       for target in aufteilung[player]["hotTargets"]:
+        file.write(target["habitatName"] + "\n")
         file.write(target["coordinateLink"] + "\n")
 
       file.write("\n")
@@ -151,3 +155,6 @@ if __name__ == "__main__":
         file.write("Nicht genug Einheiten für scharfe Ziele.\nBenötigte Einheiten pro Burg: " + str(offEinheiten) + "\n")
 
       file.write("----------------------------------------------\n")
+
+
+      
