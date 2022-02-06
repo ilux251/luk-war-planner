@@ -77,6 +77,7 @@ if __name__ == "__main__":
 
   aufteilung = {}
   enemyPlayers = []
+  countMaxHotTargets = 0
 
   enemyAllianceIds = demjson.decode(args.enemyAllianceIds)
   hotspots = demjson.decode(args.hotspots)
@@ -114,6 +115,7 @@ if __name__ == "__main__":
       if (countCastles >= int(player["castles"])):
         countCastles = int(player["castles"])
 
+      countMaxHotTargets += countCastles
       player.update({"castles": countCastles, "hotTargets": []})
 
       playersCopy.append(player)
@@ -121,11 +123,17 @@ if __name__ == "__main__":
     
     for playerIndex in range(0, len(playersCopy), 2):
       aufteilung[playersCopy[playerIndex]["name"]] = {**playersCopy[playerIndex], "fakes": [enemyCastlesCopy1.pop() for x in range(fakes)]}
-      aufteilung[playersCopy[playerIndex + 1]["name"]] = {**playersCopy[playerIndex + 1], "fakes": [enemyCastlesCopy2.pop() for x in range(fakes)]}
+      if (len(playersCopy) > playerIndex + 1):
+        print(playerIndex)
+        aufteilung[playersCopy[playerIndex + 1]["name"]] = {**playersCopy[playerIndex + 1], "fakes": [enemyCastlesCopy2.pop() for x in range(fakes)]}
       
+    if len(enemyCastlesOnlyInHotspot) <= countMaxHotTargets:
+      print("[WARN] Es sind nicht genug Hottargets vorhanden. Erwartet wird {}. Aktuell sind {} Ziele im Hotspot.".format(countMaxHotTargets, len(enemyCastlesOnlyInHotspot)))
+
     for player in aufteilung:
       for i in range(aufteilung[player]["castles"]):
-        aufteilung[player]["hotTargets"].append(enemyCastlesOnlyInHotspotCopy.pop())
+        if len(enemyCastlesOnlyInHotspotCopy) > 0:
+          aufteilung[player]["hotTargets"].append(enemyCastlesOnlyInHotspotCopy.pop())
 
   with open("war-plan.txt", "w+", encoding="utf8") as file:
     for player in aufteilung:
@@ -156,5 +164,13 @@ if __name__ == "__main__":
 
       file.write("----------------------------------------------\n")
 
+  
+  print("\n[INFO] Die 'war-plan.txt' wurde erfolgreich erstellt.\n")
+
+  print("[INFO] Anzahl der Spieler: {}.".format(len(playersCopy)))
+  print("[INFO] Anzahl der Hottargets: {}".format(len(enemyCastlesOnlyInHotspot)))
+  print("[INFO] Anzahl der gegnerischen Castles: {}".format(len(enemyCastles)))
+  print("[INFO] Anzahl der verfügbaren Fakes: {}".format(len(enemyCastlesCopy1)))
+  print("[INFO] Anzahl der verfügbaren Castles im Hotspot: {}".format(len(enemyCastlesOnlyInHotspotCopy)))
 
       
