@@ -58,20 +58,21 @@ def getPlayersHabitate(players):
   return habitate
 
 def filterOnlyCastles(habitat):
-  return len(habitat["points"]) <= 3
+  return len(habitat["points"]) <= 5
 
 def filterCastlesInHotspot(habitat, hotspots):
   possibleHotspot = list(filter(lambda hotspot: math.sqrt(pow(hotspot["x"] - habitat["coordinate-x"], 2) + pow(hotspot["y"] - habitat["coordinate-y"], 2)) <= hotspot["r"], hotspots))
   return len(possibleHotspot) > 0
 
 if __name__ == "__main__":
+
   parser = argparse.ArgumentParser()
   parser.add_argument('--enemyAllianceIds', type=str, help='Ids der gegnerischen Alliancen')
   parser.add_argument('--hotspots', type=str, help='Bereich für scharfe Ziele definieren.', required=True)
   parser.add_argument('--fakes', type=int, help='Wie viele fakes bekommt jeder Spieler?', required=True)
   parser.add_argument('--offEinheiten', type=int, help='Wie viele Einheiten pro scharfes Ziel benötigt wird.', required=True)
   parser.add_argument('--datum', type=str, help='Am welchen Tag erfolgt der Einschlag?', required=True)
-  parser.add_argument('--zeiten', type=str, help='An welchen Zeiten kann angegriffen werden?', default='["7:00", "7:10", "7:20", "7:30", "7:40", "7:50", "8:00", "8:10", "8:20", "8:30", "8:40", "8:50"]')
+  parser.add_argument('--zeiten', type=str, help='An welchen Zeiten kann angegriffen werden?', default='["7:00","7:04","7:22","7:37","7:46","7:51","7:10", "7:20", "7:30", "7:40", "7:50", "8:00","8:02","8:19","8:25","8:38","8:41","8:57", "8:10", "8:20", "8:30", "8:40", "8:50"]')
 
   args = parser.parse_args()
 
@@ -90,8 +91,8 @@ if __name__ == "__main__":
   playersUrl = "https://lordsandknights.enjoyed.today/PlayerCastles/default.aspx?player="
 
   for allianceId in enemyAllianceIds:
-    allianceUrl = allianceRequestUrl.format(allianceId)
-    enemyPlayers.extend(getPlayersFromAlliance(allianceUrl))
+    enemyAllianceUrl = allianceRequestUrl.format(allianceId)
+    enemyPlayers.extend(getPlayersFromAlliance(enemyAllianceUrl))
 
   enemyHabitate = getPlayersHabitate(enemyPlayers)
   random.shuffle(enemyHabitate)
@@ -124,8 +125,8 @@ if __name__ == "__main__":
     for playerIndex in range(0, len(playersCopy), 2):
       aufteilung[playersCopy[playerIndex]["name"]] = {**playersCopy[playerIndex], "fakes": [enemyCastlesCopy1.pop() for x in range(fakes)]}
       if (len(playersCopy) > playerIndex + 1):
-        print(playerIndex)
         aufteilung[playersCopy[playerIndex + 1]["name"]] = {**playersCopy[playerIndex + 1], "fakes": [enemyCastlesCopy2.pop() for x in range(fakes)]}
+      
       
     if len(enemyCastlesOnlyInHotspot) <= countMaxHotTargets:
       print("[WARN] Es sind nicht genug Hottargets vorhanden. Erwartet wird {}. Aktuell sind {} Ziele im Hotspot.".format(countMaxHotTargets, len(enemyCastlesOnlyInHotspot)))
@@ -172,5 +173,3 @@ if __name__ == "__main__":
   print("[INFO] Anzahl der gegnerischen Castles: {}".format(len(enemyCastles)))
   print("[INFO] Anzahl der verfügbaren Fakes: {}".format(len(enemyCastlesCopy1)))
   print("[INFO] Anzahl der verfügbaren Castles im Hotspot: {}".format(len(enemyCastlesOnlyInHotspotCopy)))
-
-      

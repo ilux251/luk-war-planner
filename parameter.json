@@ -1,0 +1,27 @@
+{
+  "enemyAllianceLinkIds": 
+  [
+    {
+      "name": "",
+      "linkId": ""
+    }
+  ],
+  "fakes": 5,
+  "offEinheiten": 3000,
+  "datum":"08.02.2022",
+  "hotspots":
+  [
+    {
+      "comment":"dawdad",
+      "x":"16200",
+      "y":"16470",
+      "r":"10"
+    },
+    {
+      "comment":"dawdad",
+      "x":"16202",
+      "y":"16470",
+      "r":"10"
+    }
+  ]
+}
